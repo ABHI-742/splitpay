@@ -1,0 +1,42 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: splitpay
+      POSTGRES_PASSWORD: splitpay
+      POSTGRES_DB: splitpay
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U splitpay"]
+      interval: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+
+  api:
+    image: node:20-alpine
+    working_dir: /app/apps/api
+    command: sh -c "npm install && npx prisma generate && npm run dev"
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://splitpay:splitpay@postgres:5432/splitpay
+      REDIS_URL: redis://redis:6379
+    volumes: ["./:/app"]
+    ports: ["4000:4000"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_started }
+
+  web:
+    image: node:20-alpine
+    working_dir: /app/apps/web
+    command: sh -c "npm install && npm run dev -- --host"
+    volumes: ["./:/app"]
+    ports: ["5173:5173"]
+    depends_on: [api]
+
+volumes:
+  pgdata:
