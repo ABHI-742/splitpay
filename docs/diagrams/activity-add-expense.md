@@ -19,7 +19,8 @@ flowchart TD
     PC -- yes --> TX
     EQ --> TX
     SH --> TX
-    TX[Transaction: insert expense, splits, activity] --> BAL[Recompute group balances]
-    BAL --> PUB[Publish expense.created to Redis]
+    TX[Transaction: insert expense, splits, activity] --> U{Unique key violated by a concurrent request?}
+    U -- yes --> R200
+    U -- no --> PUB[Publish expense.created to Redis]
     PUB --> OK([201 Created])
 ```

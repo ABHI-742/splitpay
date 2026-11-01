@@ -1,4 +1,4 @@
-import type { Expense, PrismaClient } from '@prisma/client';
+import { type Expense, Prisma, type PrismaClient } from '@prisma/client';
 import { splitByPercentage, splitByShares, splitEqually, splitExactly, type Share } from '../../domain/splitCalculator';
 import type { EventPublisher } from '../../lib/events';
 import { HttpError } from '../../lib/http';
@@ -33,13 +33,8 @@ export async function createExpense(
   actorId: string,
   input: CreateExpenseInput,
 ): Promise<{ expense: Expense; created: boolean }> {
-  if (input.idempotencyKey) {
-    const existing = await prisma.expense.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
-    if (existing) {
-      if (existing.groupId !== groupId) throw new HttpError(409, 'Idempotency key already used');
-      return { expense: existing, created: false };
-    }
-  }
+  const replay = await findByIdempotencyKey(prisma, groupId, input.idempotencyKey);
+  if (replay) return { expense: replay, created: false };
 
   const shares = computeShares(input);
   const members = new Set(await memberIds(prisma, groupId));
@@ -49,7 +44,44 @@ export async function createExpense(
     throw new HttpError(422, 'Each participant can appear only once');
   }
 
-  const expense = await prisma.$transaction(async (tx) => {
+  let expense: Expense;
+  try {
+    expense = await insertExpense(prisma, groupId, actorId, input, shares);
+  } catch (err) {
+    // Two requests with the same key raced past the lookup: the unique index lets one win,
+    // and the loser returns the winner's expense instead of failing.
+    const winner = isUniqueViolation(err) ? await findByIdempotencyKey(prisma, groupId, input.idempotencyKey) : null;
+    if (winner) return { expense: winner, created: false };
+    throw err;
+  }
+
+  await events.publish({ type: 'expense.created', groupId, expenseId: expense.id });
+  return { expense, created: true };
+}
+
+async function findByIdempotencyKey(
+  prisma: PrismaClient,
+  groupId: string,
+  key: string | undefined,
+): Promise<Expense | null> {
+  if (!key) return null;
+  const existing = await prisma.expense.findUnique({ where: { idempotencyKey: key } });
+  if (existing && existing.groupId !== groupId) throw new HttpError(409, 'Idempotency key already used');
+  return existing;
+}
+
+function isUniqueViolation(err: unknown): boolean {
+  return err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002';
+}
+
+function insertExpense(
+  prisma: PrismaClient,
+  groupId: string,
+  actorId: string,
+  input: CreateExpenseInput,
+  shares: Share[],
+): Promise<Expense> {
+  return prisma.$transaction(async (tx) => {
     const created = await tx.expense.create({
       data: {
         groupId,
@@ -72,7 +104,4 @@ export async function createExpense(
     });
     return created;
   });
-
-  await events.publish({ type: 'expense.created', groupId, expenseId: expense.id });
-  return { expense, created: true };
 }

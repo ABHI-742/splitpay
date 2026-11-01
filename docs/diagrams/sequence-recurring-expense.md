@@ -20,7 +20,7 @@ sequenceDiagram
     J->>DB: already created for this period?
     alt not yet created
         J->>DB: INSERT expense and splits (idempotency key recurring:7:2026-11)
-        J->>R: PUBLISH group:42 expense.created
+        J->>R: PUBLISH splitpay:group-events expense.created
     else already created
         J->>J: skip
     end

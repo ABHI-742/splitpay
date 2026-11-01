@@ -118,6 +118,18 @@ describe('groups and expenses', () => {
     expect(await prisma.expense.count()).toBe(1);
   });
 
+  it('creates one expense when identical requests arrive at the same time', async () => {
+    const [alice, bob] = [await register(app(), 'Alice'), await register(app(), 'Bob')];
+    const groupId = await groupWith(app(), [alice, bob]);
+    const body = { ...equalExpense(alice.id, [alice.id, bob.id], 5000), idempotencyKey: 'double-click-key' };
+    const responses = await Promise.all(
+      Array.from({ length: 5 }, () => request(app()).post(`/groups/${groupId}/expenses`).set(alice.auth).send(body)),
+    );
+    expect(responses.map((r) => r.status).sort()).toEqual([200, 200, 200, 200, 201]);
+    expect(new Set(responses.map((r) => r.body.id)).size).toBe(1);
+    expect(await prisma.expense.count()).toBe(1);
+  });
+
   it('validates input and membership', async () => {
     const [alice, bob, mallory] = [await register(app(), 'Alice'), await register(app(), 'Bob'), await register(app(), 'Mallory')];
     const groupId = await groupWith(app(), [alice, bob]);

@@ -27,12 +27,12 @@ sequenceDiagram
 
     S->>API: POST /webhooks/stripe checkout.session.completed
     API->>API: verify signature
-    API->>DB: event ID already processed?
+    API->>DB: event ID already stored, or settlement no longer PENDING?
     alt new event
-        API->>DB: settlement status PAID, store event ID, add activity
-        API->>R: PUBLISH group:42 settlement.paid + balances
-        R-->>GW: fan out
-        GW-->>W: emit settlement.paid
+        API->>DB: UPDATE settlement SET PAID, event ID WHERE status = PENDING, add activity
+        API->>R: PUBLISH splitpay:group-events settlement.updated
+        R-->>GW: fan out to every API instance
+        GW-->>W: emit group:event, browser refetches balances
     else duplicate event
         API->>API: ignore
     end

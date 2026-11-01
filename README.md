@@ -40,17 +40,18 @@ flowchart LR
     end
 
     subgraph Jobs
-        BQ[BullMQ worker<br/>recurring expenses, reminders]
+        BQ[BullMQ worker<br/>recurring expenses, 5 retries]
+        DLQ[(Dead-letter queue<br/>npm run dlq:replay)]
     end
 
     subgraph Data
         PG[(PostgreSQL<br/>via Prisma)]
-        RD[(Redis<br/>pub/sub, queues, rate limits)]
+        RD[(Redis<br/>pub/sub channel, queues, rate limits)]
     end
 
     STRIPE[[Stripe API<br/>test mode]]
 
-    WEB -->|HTTPS + JWT| REST
+    WEB -->|"HTTPS: access token + refresh cookie"| REST
     WEB <-->|WebSocket| WS
     REST --> SVC
     SVC --> SIMP
@@ -62,9 +63,10 @@ flowchart LR
     HOOK --> SVC
     BQ --> RD
     BQ --> SVC
+    BQ -.->|after the last attempt| DLQ
 ```
 
-More diagrams (sequence, class, ER, state, activity, deployment) are in [`docs/`](docs/).
+The full design, including idempotency, retries, security and scaling, is in [`docs/architecture.md`](docs/architecture.md). More diagrams (sequence, class, ER, state, activity, deployment) are in [`docs/diagrams/`](docs/diagrams/).
 
 ## Tech stack
 
@@ -115,7 +117,7 @@ docker run -d -p 56379:6379 redis:7-alpine
 cd apps/api && npm install && npx prisma generate && npm test
 ```
 
-31 tests run against real PostgreSQL and Redis: split maths, debt simplification, auth and token rotation, membership rules, idempotency, Stripe webhook signatures and duplicate deliveries, cash settlements, BullMQ scheduling, retries and the dead-letter queue, and WebSocket fan-out. Stripe Checkout creation is the only faked call.
+32 tests run against real PostgreSQL and Redis: split maths, debt simplification, auth and token rotation, membership rules, idempotency (including concurrent duplicate requests), Stripe webhook signatures and duplicate deliveries, cash settlements, BullMQ scheduling, retries and the dead-letter queue, and WebSocket fan-out. Stripe Checkout creation is the only faked call.
 
 ## Project structure
 
@@ -157,7 +159,7 @@ Node.js · Express · TypeScript · Prisma ORM · Zod · PostgreSQL · Redis · 
 - [x] Expenses with idempotency keys and ledger-derived balances
 - [x] Real-time updates over WebSockets
 - [x] Stripe Checkout settlement with signed, idempotent webhooks
-- [x] Recurring expenses with BullMQ
+- [x] Recurring expenses with BullMQ, retries with backoff and a replayable dead-letter queue
 - [x] React web app
 - [ ] Multi-currency groups with exchange rates
 - [ ] Receipt scanning (OCR)

@@ -1,5 +1,7 @@
 # Class diagram
 
+The data model (top) mirrors `apps/api/prisma/schema.prisma`. The services (bottom) use the names in `apps/api/src`; plain function modules are shown as `<<module>>`.
+
 ```mermaid
 classDiagram
     direction LR
@@ -9,32 +11,35 @@ classDiagram
         +string email
         +string name
     }
+    class RefreshToken {
+        +string tokenHash
+        +Date expiresAt
+        +Date revokedAt
+    }
     class Group {
         +string id
         +string name
         +string currency
-        +addMember(user, role)
     }
     class Membership {
-        +Role role
+        +MemberRole role
         +Date joinedAt
     }
     class Expense {
         +string id
-        +string description
         +int amountMinor
-        +SplitMethod method
+        +SplitMethod splitMethod
         +Date incurredOn
+        +string idempotencyKey
     }
     class ExpenseSplit {
         +int amountMinor
     }
     class Settlement {
-        +string id
         +int amountMinor
         +SettlementStatus status
         +string stripeSessionId
-        +markPaid(eventId)
+        +string stripeEventId
     }
     class RecurringExpense {
         +string cron
@@ -42,53 +47,81 @@ classDiagram
         +bool active
     }
 
+    User "1" -- "many" RefreshToken
     User "1" -- "many" Membership
     Group "1" -- "many" Membership
     Group "1" *-- "many" Expense
     Expense "1" *-- "many" ExpenseSplit
-    User "1" -- "many" ExpenseSplit : owes
-    User "1" -- "many" Expense : paid
     Group "1" *-- "many" Settlement
     Group "1" *-- "many" RecurringExpense
 
-    class SplitCalculator {
-        <<domain>>
-        +equal(total, members) Share[]
-        +exact(total, amounts) Share[]
-        +percentage(total, percents) Share[]
-        +shares(total, weights) Share[]
+    class TokenService {
+        +signAccess(userId) string
+        +verifyAccess(token) AccessClaims
     }
-    class DebtSimplifier {
-        <<domain>>
-        +simplify(balances) Transfer[]
+    class expensesService {
+        <<module>>
+        +createExpense(groupId, actor, input) Expense
+        +computeShares(input) Share[]
     }
-    class BalanceService {
-        +forGroup(groupId) Balance[]
+    class splitCalculator {
+        <<module>>
+        +splitEqually()
+        +splitExactly()
+        +splitByPercentage()
+        +splitByShares()
     }
-    class ExpenseService {
-        +create(groupId, input, actor) Expense
+    class debtSimplifier {
+        <<module>>
+        +simplifyDebts(balances) Transfer[]
     }
-    class SettlementService {
-        +suggest(groupId) Transfer[]
-        +startCheckout(groupId, input, actor) string
-        +handleWebhook(event)
+    class balancesService {
+        <<module>>
+        +groupBalances(groupId) Balance[]
     }
     class EventPublisher {
-        +publish(groupId, event)
+        <<interface>>
+        +publish(event)
     }
+    class RedisEventPublisher
+    class MemoryEventPublisher
+    EventPublisher <|.. RedisEventPublisher
+    EventPublisher <|.. MemoryEventPublisher
+
     class PaymentGateway {
         <<interface>>
-        +createCheckout(settlement) string
-        +verifyWebhook(payload, signature) Event
+        +createCheckout(request) Checkout
+        +parseWebhook(payload, signature) PaymentEvent
     }
     class StripeGateway
-
-    ExpenseService --> SplitCalculator
-    ExpenseService --> BalanceService
-    ExpenseService --> EventPublisher
-    SettlementService --> BalanceService
-    SettlementService --> DebtSimplifier
-    SettlementService --> PaymentGateway
-    SettlementService --> EventPublisher
     PaymentGateway <|.. StripeGateway
+
+    class RecurringScheduler {
+        <<interface>>
+        +schedule(recurringId, cron)
+        +unschedule(recurringId)
+    }
+    class BullRecurringScheduler
+    class MemoryRecurringScheduler
+    RecurringScheduler <|.. BullRecurringScheduler
+    RecurringScheduler <|.. MemoryRecurringScheduler
+
+    class RecurringWorker {
+        +Worker worker
+        +Queue deadLetters
+        +close()
+    }
+    class RateLimitStore {
+        <<interface>>
+        +hit(key, windowSeconds) int
+    }
+    class RedisRateLimitStore
+    RateLimitStore <|.. RedisRateLimitStore
+
+    expensesService --> splitCalculator
+    expensesService --> EventPublisher
+    RecurringWorker --> expensesService : runRecurringExpense
+    RecurringWorker --> EventPublisher
 ```
+
+Every interface has an in-memory or fake implementation for the tests (`MemoryEventPublisher`, `MemoryRecurringScheduler`, `MemoryRateLimitStore`, `FakeStripeGateway`).
