@@ -19,24 +19,38 @@ services:
   api:
     image: node:20-alpine
     working_dir: /app/apps/api
-    command: sh -c "npm install && npx prisma generate && npm run dev"
+    command: sh -c "npm install && npx prisma db push --skip-generate && npx prisma generate && npm run dev"
     env_file: .env
-    environment:
+    environment: &api-env
       DATABASE_URL: postgresql://splitpay:splitpay@postgres:5432/splitpay
       REDIS_URL: redis://redis:6379
-    volumes: ["./:/app"]
+    volumes: ["./:/app", "api_node_modules:/app/apps/api/node_modules"]
     ports: ["4000:4000"]
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_started }
 
+  worker:
+    image: node:20-alpine
+    working_dir: /app/apps/api
+    # Waits for the api service to install dependencies and generate the Prisma client.
+    command: sh -c "until [ -d node_modules/.prisma/client ]; do sleep 2; done; npm run dev:worker"
+    env_file: .env
+    environment: *api-env
+    volumes: ["./:/app", "api_node_modules:/app/apps/api/node_modules"]
+    depends_on: [api]
+
   web:
     image: node:20-alpine
     working_dir: /app/apps/web
     command: sh -c "npm install && npm run dev -- --host"
-    volumes: ["./:/app"]
+    environment:
+      API_TARGET: http://api:4000
+    volumes: ["./:/app", "web_node_modules:/app/apps/web/node_modules"]
     ports: ["5173:5173"]
     depends_on: [api]
 
 volumes:
   pgdata:
+  api_node_modules:
+  web_node_modules:

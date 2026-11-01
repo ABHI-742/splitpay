@@ -14,6 +14,10 @@ const EnvSchema = z.object({
 
 export type Config = z.infer<typeof EnvSchema>;
 
+/** Keys in .env are usually single-line with literal "\n" sequences. */
+const pem = (value: string) => value.replace(/\\n/g, '\n');
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
-  return EnvSchema.parse(env);
+  const config = EnvSchema.parse(env);
+  return { ...config, JWT_PRIVATE_KEY: pem(config.JWT_PRIVATE_KEY), JWT_PUBLIC_KEY: pem(config.JWT_PUBLIC_KEY) };
 }

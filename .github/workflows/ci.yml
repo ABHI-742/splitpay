@@ -11,17 +11,35 @@ jobs:
     defaults:
       run:
         working-directory: apps/api
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: splitpay
+          POSTGRES_PASSWORD: splitpay
+          POSTGRES_DB: splitpay_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U splitpay" --health-interval 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+    env:
+      TEST_DATABASE_URL: postgresql://splitpay:splitpay@localhost:5432/splitpay_test
+      TEST_REDIS_URL: redis://localhost:6379
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
       - run: npm install
+      - run: npx prisma generate
       - run: npx prisma validate
         env:
-          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+          DATABASE_URL: ${{ env.TEST_DATABASE_URL }}
       - run: npm run lint
       - run: npm test
+      - run: npm run build
 
   web:
     runs-on: ubuntu-latest

@@ -8,7 +8,7 @@
 | Everyone sees changes instantly | Every write publishes a group event on Redis; Socket.IO pushes it to members of that group's room |
 | Fewest possible payments | A greedy min-cash-flow algorithm produces at most n − 1 transfers for n members |
 | Payments are safe and idempotent | Stripe Checkout handles card data; webhooks are verified by signature and processed once using the event ID |
-| Scales horizontally | Stateless API instances; the Socket.IO Redis adapter shares rooms across instances |
+| Scales horizontally | Stateless API instances; every instance subscribes to one Redis pub/sub channel and emits to its own sockets |
 
 ## 2. System context
 
@@ -35,7 +35,7 @@ flowchart TB
 | --- | --- | --- |
 | **Web** | Group dashboard, expense forms, balances, settle-up | React, TypeScript, Vite |
 | **API** | REST endpoints, validation, business rules, Stripe integration | Express, TypeScript, Zod |
-| **Realtime gateway** | Authenticated WebSocket connections, one room per group | Socket.IO in the API process |
+| **Realtime gateway** | Authenticated WebSocket connections, one room per group, fed by a Redis pub/sub channel | Socket.IO in the API process |
 | **Job worker** | Recurring expenses, payment reminders | BullMQ |
 | **PostgreSQL** | Users, groups, expenses, splits, settlements, activity | Prisma |
 | **Redis** | Pub/sub for group events, BullMQ queues, rate-limit counters | Redis 7 |
@@ -62,7 +62,7 @@ Implemented in `apps/api/src/domain/debtSimplifier.ts`, with tests.
 
 ## 6. Security
 
-- **Auth:** RS256-signed JWT access tokens (15 min) and rotating refresh tokens in httpOnly, SameSite cookies
+- **Auth:** RS256-signed JWT access tokens (15 min) and single-use refresh tokens in httpOnly, SameSite=Strict cookies; reusing a revoked refresh token revokes every session for that user
 - **Authorization:** every group route checks membership; only owners can remove members or delete the group
 - **Validation:** all request bodies and query strings are parsed with Zod schemas; unknown fields are rejected
 - **Payments:** no card data touches SplitPay; webhook signatures are verified and event IDs are stored to prevent double-processing

@@ -5,10 +5,10 @@ const minor = z.number().int().nonnegative();
 export const CreateExpenseSchema = z
   .object({
     description: z.string().trim().min(1).max(140),
-    amountMinor: z.number().int().positive(),
+    amountMinor: z.number().int().positive().max(100_000_000),
     paidById: z.string().min(1),
     incurredOn: z.coerce.date(),
-    idempotencyKey: z.string().uuid().optional(),
+    idempotencyKey: z.string().min(8).max(100).optional(),
     split: z.discriminatedUnion('method', [
       z.object({ method: z.literal('EQUAL'), userIds: z.array(z.string()).min(1) }),
       z.object({
@@ -28,3 +28,8 @@ export const CreateExpenseSchema = z
   .strict();
 
 export type CreateExpenseInput = z.infer<typeof CreateExpenseSchema>;
+
+export const ListExpensesSchema = z.object({
+  cursor: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(25),
+});

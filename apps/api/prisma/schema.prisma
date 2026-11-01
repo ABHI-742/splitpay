@@ -44,6 +44,19 @@ model User {
   settlementsSent     Settlement[]   @relation("SettlementFrom")
   settlementsReceived Settlement[]   @relation("SettlementTo")
   activities          Activity[]
+  refreshTokens       RefreshToken[]
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model Group {
@@ -126,6 +139,7 @@ model RecurringExpense {
   splitMethod SplitMethod @default(EQUAL)
   cron        String
   active      Boolean     @default(true)
+  createdAt   DateTime    @default(now())
   group       Group       @relation(fields: [groupId], references: [id], onDelete: Cascade)
 }
 
@@ -146,5 +160,6 @@ model Invite {
   token     String   @id
   groupId   String
   expiresAt DateTime
+  createdAt DateTime @default(now())
   group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
 }

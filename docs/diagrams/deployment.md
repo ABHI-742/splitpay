@@ -22,4 +22,4 @@ flowchart TB
     cli -->|forward webhooks| api
 ```
 
-Scaling path: run several `api` containers behind a load balancer with sticky sessions disabled; the Socket.IO Redis adapter keeps group rooms consistent across instances.
+Scaling path: run several `api` containers behind a load balancer. WebSocket clients connect with the websocket transport, so no sticky sessions are needed; every instance subscribes to the same Redis channel and delivers events to its own connected clients.
