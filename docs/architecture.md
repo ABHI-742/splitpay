@@ -36,7 +36,7 @@ flowchart TB
 | **Web** | Group dashboard, expense forms, balances, settle-up | React, TypeScript, Vite |
 | **API** | REST endpoints, validation, business rules, Stripe integration | Express, TypeScript, Zod |
 | **Realtime gateway** | Authenticated WebSocket connections, one room per group, fed by a Redis pub/sub channel | Socket.IO in the API process |
-| **Job worker** | Recurring expenses, payment reminders | BullMQ |
+| **Job worker** | Recurring expenses, payment reminders; 5 attempts with exponential backoff, then a dead-letter queue (`npm run dlq:replay` re-queues) | BullMQ |
 | **PostgreSQL** | Users, groups, expenses, splits, settlements, activity | Prisma |
 | **Redis** | Pub/sub for group events, BullMQ queues, rate-limit counters | Redis 7 |
 

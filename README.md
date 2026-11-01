@@ -20,7 +20,7 @@ Shared expenses are a constant source of friction: someone pays rent, someone el
 | **Accounts** | Email and password sign-up, RS256 access tokens, rotating refresh tokens with reuse detection |
 | **Debt simplification** | Greedy min-cash-flow algorithm turns the web of debts into the fewest transfers |
 | **Settle up** | Pay a suggested transfer through Stripe Checkout (test mode); a webhook marks it settled |
-| **Recurring expenses** | Rent and subscriptions are added automatically on a schedule (BullMQ jobs) |
+| **Recurring expenses** | Rent and subscriptions are added automatically on a schedule (BullMQ jobs, 5 attempts with exponential backoff, dead-letter queue with replay) |
 | **Activity feed** | Every change is recorded and shown in a per-group timeline |
 
 ## Architecture
@@ -115,7 +115,7 @@ docker run -d -p 56379:6379 redis:7-alpine
 cd apps/api && npm install && npx prisma generate && npm test
 ```
 
-29 tests run against real PostgreSQL and Redis: split maths, debt simplification, auth and token rotation, membership rules, idempotency, Stripe webhook signatures and duplicate deliveries, cash settlements, BullMQ scheduling, and WebSocket fan-out. Stripe Checkout creation is the only faked call.
+31 tests run against real PostgreSQL and Redis: split maths, debt simplification, auth and token rotation, membership rules, idempotency, Stripe webhook signatures and duplicate deliveries, cash settlements, BullMQ scheduling, retries and the dead-letter queue, and WebSocket fan-out. Stripe Checkout creation is the only faked call.
 
 ## Project structure
 
